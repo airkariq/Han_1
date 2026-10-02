@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>잠수함 이미지 프롬프트 생성기</title>
+<style>
+:root {
+  --bg:#07111f; --panel:#0d1b2a; --panel2:#102235; --line:#25415d;
+  --text:#eaf4ff; --muted:#92a9bd; --accent:#37c6d8; --accent2:#7ce7ef;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Noto Sans KR",sans-serif;background:linear-gradient(180deg,#06101c,#0a1626);color:var(--text)}
+header{padding:28px 24px 18px;max-width:1500px;margin:auto}
+h1{margin:0 0 8px;font-size:30px}
+header p{margin:0;color:var(--muted);line-height:1.6}
+main{max-width:1500px;margin:auto;padding:0 24px 40px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,.65fr);gap:20px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+button{border:1px solid var(--line);background:#10263a;color:var(--text);padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:700}
+button:hover{border-color:var(--accent);background:#123149}
+button.primary{background:var(--accent);color:#03212a;border-color:var(--accent)}
+button.danger{background:#251721;border-color:#5c3144}
+.card{background:rgba(13,27,42,.96);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.card h2{font-size:17px;margin:0}
+.count{font-size:12px;color:var(--accent2);background:#0a2430;padding:4px 8px;border-radius:999px}
+.search{width:100%;padding:9px 10px;border:1px solid var(--line);background:#081522;color:var(--text);border-radius:9px;margin-bottom:10px}
+.keywords{display:flex;flex-wrap:wrap;gap:7px;max-height:190px;overflow:auto;padding-right:4px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #29465f;background:#0b1a29;padding:7px 9px;border-radius:9px;font-size:13px;cursor:pointer}
+.chip input{accent-color:var(--accent)}
+.custom{display:flex;gap:8px;margin-top:10px}
+.custom input{flex:1;padding:9px 10px;border:1px solid var(--line);background:#081522;color:var(--text);border-radius:9px}
+.sticky{position:sticky;top:12px;align-self:start}
+.outbox{width:100%;min-height:245px;resize:vertical;background:#06111d;color:#dffaff;border:1px solid var(--line);border-radius:10px;padding:12px;line-height:1.55;font-family:Consolas,monospace}
+.small{min-height:155px}
+.section-title{font-size:14px;color:var(--accent2);margin:12px 0 7px;font-weight:700}
+.options{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.options label{font-size:13px;color:var(--muted)}
+.footer-note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+@media(max-width:980px){main{grid-template-columns:1fr}.sticky{position:static}}
+</style>
+</head>
+<body>
+<header>
+  <h1>잠수함 이미지 프롬프트 생성기</h1>
+  <p>키워드를 선택하거나 직접 입력한 뒤 구조형·서술형 프롬프트를 생성합니다. 모든 처리는 브라우저 내부에서만 동작합니다.</p>
+</header>
+
+<main>
+<section>
+  <div class="toolbar">
+    <button class="primary" onclick="applyPreset()">추천 예시 불러오기</button>
+    <button onclick="selectRealism()">실사 품질 키워드 자동선택</button>
+    <button class="danger" onclick="resetAll()">전체 초기화</button>
+  </div>
+  <div id="builder"></div>
+</section>
+
+<aside class="sticky">
+  <div class="card">
+    <div class="card-head"><h2>프롬프트 출력</h2><span class="count" id="totalCount">0개 선택</span></div>
+    <div class="options">
+      <label><input type="checkbox" id="constraintNo" checked> Constraints에 "no" 자동 적용</label>
+      <label><input type="checkbox" id="autoUpdate" checked> 선택 즉시 자동 생성</label>
+    </div>
+    <button class="primary" style="width:100%;margin-bottom:10px" onclick="generate()">프롬프트 생성</button>
+
+    <div class="section-title">구조형 프롬프트</div>
+    <textarea id="structured" class="outbox" readonly></textarea>
+    <div class="toolbar">
+      <button onclick="copyText('structured')">구조형 복사</button>
+      <button onclick="downloadText('structured','submarine_structured_prompt.txt')">TXT 저장</button>
+    </div>
+
+    <div class="section-title">서술형 프롬프트</div>
+    <textarea id="narrative" class="outbox small" readonly></textarea>
+    <div class="toolbar">
+      <button onclick="copyText('narrative')">서술형 복사</button>
+      <button onclick="downloadText('narrative','submarine_narrative_prompt.txt')">TXT 저장</button>
+    </div>
+    <div class="footer-note">팁: Subject는 1~2개, Camera는 2~4개, Style/Details는 4~8개 정도가 일반적으로 다루기 쉽습니다.</div>
+  </div>
+</aside>
+</main>
+
+<script>
+const DATA = {"Subject": ["현대식 군용 공격 잠수함", "핵추진 공격 잠수함", "디젤-전기 추진 잠수함", "전략 핵잠수함", "탄도미사일 잠수함", "순항미사일 잠수함", "연안 작전 잠수함", "소형 잠수함", "특수작전 잠수함", "무인 잠수정", "UUV", "AUV", "수중 드론", "심해 탐사 잠수정", "연구용 잠수정", "구조용 잠수함", "스텔스 잠수함", "차세대 미래형 잠수함", "대잠전 잠수함", "정찰용 잠수함", "특수부대 침투용 잠수정", "전투용 무인 잠수정", "잠수함 편대", "잠수함과 호위함", "잠수함과 수중 드론", "잠수함과 적 잠수함", "잠수함과 구축함", "잠수함과 항공모함 전단", "modern attack submarine", "military submarine", "nuclear-powered submarine", "diesel-electric submarine", "ballistic missile submarine", "stealth submarine", "unmanned underwater vehicle", "autonomous underwater vehicle"], "Mission": ["적 잠수함 탐지", "적 수상함 탐지", "적 함정 추적", "대잠전 수행", "대수상함전 수행", "수중 감시", "해저 정찰", "적 해역 침투", "은밀 감시", "장거리 정찰", "정보수집", "해상 교통로 감시", "항모전단 추적", "적 함대 감시", "해저 케이블 감시", "해저 시설 감시", "기뢰 탐지", "기뢰 제거 지원", "특수부대 침투 지원", "구조작전", "조난 잠수함 탐색", "수중 통신 중계", "해양 정보수집", "수중 전장 감시", "표적 식별", "표적 위치 추적", "적 잠수함 교전", "어뢰 공격", "미사일 발사 임무", "전략 억제 임무", "해역 봉쇄", "해상 접근 거부", "적 항만 감시", "은밀한 장기 초계", "anti-submarine warfare", "underwater reconnaissance", "target detection", "target tracking", "covert patrol", "intelligence gathering", "maritime surveillance", "strategic deterrence"], "Action": ["정숙 항해", "심해 항해", "저속 항해", "고속 잠항", "급강하", "급상승", "방향 전환", "수중 선회", "해저 협곡 통과", "해저 지형을 따라 기동", "수면 아래 잠항", "잠망경 심도로 상승", "잠망경 운용", "소나 탐색", "능동 소나 송신", "수동 소나 청취", "소나 표적 탐지", "소나 표적 추적", "소나 반사파 분석", "어뢰 발사", "다중 어뢰 발사", "어뢰 회피", "기만기 발사", "디코이 전개", "미사일 발사", "수직발사관 개방", "UUV 발진", "수중 드론 회수", "특수부대 출동", "잠수요원 배출", "해저 탐색", "난파선 조사", "해저 시설 접근", "적 잠수함 추적", "적 함정 뒤를 은밀하게 추적", "적 어뢰 회피 기동", "silent cruising", "diving", "maneuvering underwater", "active sonar ping", "passive sonar tracking", "torpedo launch", "evasive maneuver", "decoy deployment"], "Environment": ["깊고 어두운 심해", "심해 평원", "심해 협곡", "해저 절벽", "해저 산맥", "해구", "깊은 해저 계곡", "심해 분지", "연안 해역", "얕은 바다", "항만 주변", "해협", "군항 인근", "섬 주변 해역", "북극 해역", "빙하 아래", "해빙 아래", "얼음이 떠다니는 바다", "극저온 수중 환경", "탁한 바닷속", "깨끗한 심해", "부유물이 많은 바닷속", "침몰선 주변", "해저 기지 주변", "해저 케이블 주변", "열수분출공 주변", "화산성 해저 지형", "산호초 지형", "암초 지역", "수중 동굴", "해저 터널", "해저 시설물", "해저 암반", "자갈", "진흙 퇴적층", "모래", "부유 입자", "플랑크톤", "미세 기포", "해저 먼지", "수중 안개", "청록색 수층", "짙은 남색 수층", "원거리 수중 헤이즈", "deep ocean", "abyssal zone", "underwater canyon", "ocean trench", "rocky seabed", "suspended particles", "underwater haze", "arctic waters"], "System": ["함수 소나", "선체 소나", "측면 배열 소나", "예인 소나", "가변심도 소나", "능동 소나", "수동 소나", "소나 돔", "소나 배열", "소나 센서 패널", "중어뢰", "경어뢰", "유도 어뢰", "중어뢰 발사관", "어뢰 튜브", "수직발사관", "순항미사일", "대함미사일", "기뢰", "어뢰 기만기", "음향 디코이", "프로펠러", "7엽 프로펠러", "펌프젯", "저소음 추진체계", "전기 추진", "원자로 추진", "디젤-전기 추진", "AIP 추진체계", "잠망경", "광학 마스트", "EO/IR 센서", "레이더 마스트", "통신 마스트", "위성통신 안테나", "전자전 안테나", "항법 센서", "UUV 발사장치", "수중 드론", "특수부대 잠수정", "구조 캡슐", "해저 센서", "수중 통신장치", "bow sonar dome", "flank array sonar", "towed array sonar", "torpedo tube", "heavyweight torpedo", "pump-jet propulsion", "optical mast"], "Camera": ["정면", "측면", "후면", "전면 3/4", "후면 3/4", "탑뷰", "버드아이뷰", "로우 앵글", "하이 앵글", "아래에서 올려다보는 시점", "위에서 내려다보는 시점", "수평 시점", "ultra wide angle", "wide angle", "24mm lens", "35mm lens", "50mm lens", "telephoto", "macro detail", "cinematic wide shot", "extreme wide shot", "establishing shot", "medium shot", "close-up", "extreme close-up", "centered composition", "asymmetrical composition", "rule of thirds", "diagonal composition", "dynamic composition", "foreground-background depth", "panoramic composition", "16:9", "21:9 cinematic ratio", "front three-quarter view", "slightly low angle"], "Lighting": ["자연 수중광", "짙은 남색 환경광", "청록색 수중광", "희미한 태양광", "수면에서 내려오는 빛", "god rays", "volumetric light", "volumetric underwater lighting", "은은한 항법등", "붉은 항법등", "청색 센서 조명", "소나 발광 효과", "백라이트", "림라이트", "측면광", "실루엣 조명", "저조도", "극저조도", "고대비 조명", "부드러운 확산광", "영화적 조명", "군사 다큐멘터리 조명", "차가운 색온도", "깊은 그림자", "빛 산란", "수중 광선", "자연스러운 수중 감쇠", "cinematic lighting", "cold blue lighting", "subtle rim lighting", "deep shadows", "light scattering"], "Style": ["photorealistic", "ultra realistic", "hyper realistic", "cinematic realism", "photographic realism", "documentary realism", "military documentary", "naval documentary", "defense industry promotional image", "military concept art", "tactical realism", "realistic naval warfare", "cinematic", "blockbuster movie style", "dramatic cinematic realism", "high-budget military movie", "tense underwater thriller", "engineering visualization", "technical visualization", "military infographic", "defense technology illustration", "scientific visualization", "concept art", "matte painting", "digital painting", "photorealistic CGI", "Unreal Engine realism", "physically based rendering", "PBR", "ray tracing", "HDR"], "Motion": ["느린 정숙 항해", "빠른 수중 기동", "급격한 방향 전환", "급강하", "상승", "선회", "어뢰 발사", "어뢰 고속 이동", "어뢰의 버블 트레일", "캐비테이션", "프로펠러 난류", "펌프젯 난류", "수중 와류", "미세 기포", "후류", "수중 압력파", "소나 파동 확산", "소나 반사파", "디코이 확산", "해저 먼지 상승", "부유물 이동", "물의 흐름", "동적인 입자", "motion blur", "subtle motion blur", "high-speed underwater movement"], "Details": ["음향 흡수 타일", "외판 패널", "용접선", "점검 해치", "함수 소나 돔", "어뢰 발사구", "세일", "잠망경", "통신 마스트", "센서 마스트", "펌프젯", "프로펠러", "방향타", "수평타", "matte black hull", "dark graphite hull", "wet metal texture", "acoustic tile texture", "subtle surface wear", "realistic scratches", "saltwater stains", "subtle corrosion", "metallic reflections", "미세한 플랑크톤", "부유 입자", "기포", "난류", "굴절", "물의 산란", "빛 감쇠", "깊이에 따른 색 변화", "volumetric haze", "depth attenuation", "realistic caustics", "water distortion", "physically accurate scale", "realistic proportions", "realistic hydrodynamics", "physically plausible lighting", "realistic water pressure atmosphere", "authentic naval engineering", "technically believable design", "operational realism", "highly detailed surface", "fine mechanical details", "realistic depth perception"], "Constraints": ["cartoon", "anime", "comic style", "toy-like", "plastic model appearance", "childish design", "low-poly", "game asset look", "spaceship design", "excessive futuristic design", "alien technology", "laser weapons", "glowing neon hull", "unrealistic holograms", "exaggerated cyberpunk elements", "fantasy submarine", "비정상적인 잠수함 비율", "과도하게 큰 함교", "잘못된 프로펠러", "비정상적인 어뢰 크기", "어뢰 발사관 위치 오류", "비현실적인 잠망경", "기형적인 외판", "duplicated components", "malformed geometry", "수중에서 불꽃이 타는 모습", "과도한 폭발", "비현실적 연기", "공중을 날아가는 잠수함", "물리적으로 불가능한 동작", "과도한 기포", "지나치게 밝은 심해", "외부에 노출된 승무원", "blurry", "low resolution", "overexposed", "oversaturated", "distorted", "artifacts", "text", "subtitle", "watermark", "logo", "UI elements", "frame", "border"]};
+const LABELS = {"Subject": "주요 대상", "Mission": "작전 목적", "Action": "핵심 행동", "Environment": "배경 환경", "System": "잠수함 / 무장 / 센서", "Camera": "카메라 / 구도", "Lighting": "조명 / 분위기", "Style": "표현 스타일", "Motion": "움직임 / 동세", "Details": "세부 묘사", "Constraints": "배제 요소"};
+const ORDER = ["Subject","Mission","Action","Environment","System","Camera","Lighting","Style","Motion","Details","Constraints"];
+
+function makeId(s){return s.replace(/[^a-zA-Z0-9가-힣]/g,'_')}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+
+function render(){
+  const root=document.getElementById('builder');
+  root.innerHTML=ORDER.map(section=>`
+    <div class="card" data-section="${section}">
+      <div class="card-head">
+        <h2>[${section}] ${LABELS[section]}</h2>
+        <span class="count" id="count_${section}">0개</span>
+      </div>
+      <input class="search" placeholder="키워드 검색..." oninput="filterSection('${section}',this.value)">
+      <div class="keywords" id="kw_${section}">
+        ${DATA[section].map((kw,i)=>`
+          <label class="chip" data-text="${escapeHtml(kw.toLowerCase())}">
+            <input type="checkbox" class="kwcheck" data-section="${section}" value="${escapeHtml(kw)}" onchange="changed()">
+            <span>${escapeHtml(kw)}</span>
+          </label>`).join('')}
+      </div>
+      <div class="custom">
+        <input id="custom_${section}" placeholder="직접 입력 (쉼표로 여러 개 입력 가능)" onkeydown="if(event.key==='Enter')addCustom('${section}')">
+        <button onclick="addCustom('${section}')">추가</button>
+      </div>
+      <div class="keywords" id="customchips_${section}" style="margin-top:8px"></div>
+    </div>`).join('');
+  generate();
+}
+
+function filterSection(section,q){
+  q=q.toLowerCase().trim();
+  document.querySelectorAll(`#kw_${section} .chip`).forEach(el=>{
+    el.style.display = !q || el.dataset.text.includes(q) ? 'inline-flex':'none';
+  });
+}
+
+function addCustom(section){
+  const input=document.getElementById('custom_'+section);
+  const vals=input.value.split(',').map(x=>x.trim()).filter(Boolean);
+  vals.forEach(v=>{
+    const wrap=document.createElement('label');
+    wrap.className='chip';
+    wrap.innerHTML=`<input type="checkbox" class="kwcheck" data-section="${section}" value="${escapeHtml(v)}" checked onchange="changed()"><span>${escapeHtml(v)}</span><button type="button" onclick="event.preventDefault();this.parentElement.remove();changed()" style="padding:0 4px;border:0;background:transparent">×</button>`;
+    document.getElementById('customchips_'+section).appendChild(wrap);
+  });
+  input.value='';
+  changed();
+}
+
+function getSelected(section){
+  return [...document.querySelectorAll(`.kwcheck[data-section="${section}"]:checked`)].map(x=>x.value);
+}
+
+function changed(){
+  ORDER.forEach(s=>document.getElementById('count_'+s).textContent=getSelected(s).length+'개');
+  document.getElementById('totalCount').textContent=ORDER.reduce((n,s)=>n+getSelected(s).length,0)+'개 선택';
+  if(document.getElementById('autoUpdate').checked) generate();
+}
+
+function generate(){
+  const noPrefix=document.getElementById('constraintNo').checked;
+  let structured=[];
+  let narrative=[];
+  ORDER.forEach(s=>{
+    let arr=getSelected(s);
+    if(!arr.length) return;
+    let output=arr;
+    if(s==='Constraints' && noPrefix){
+      output=arr.map(v=>/^(no\s|비|과도|잘못|기형|공중|물리|지나치|외부)/i.test(v)?v:`no ${v}`);
+    }
+    structured.push(`[${s}]\n${output.join(', ')}`);
+    if(s!=='Constraints') narrative.push(output.join(', '));
+  });
+  const constraints=getSelected('Constraints');
+  let tail='';
+  if(constraints.length){
+    const c=noPrefix?constraints.map(v=>/^(no\s|비|과도|잘못|기형|공중|물리|지나치|외부)/i.test(v)?v:`no ${v}`):constraints;
+    tail=' Avoid: '+c.join(', ')+'.';
+  }
+  document.getElementById('structured').value=structured.join('\n\n');
+  document.getElementById('narrative').value=(narrative.join('. ')+'.'+tail).replace(/^\.\s*/,'');
+  changedNoLoop();
+}
+
+function changedNoLoop(){
+  ORDER.forEach(s=>document.getElementById('count_'+s).textContent=getSelected(s).length+'개');
+  document.getElementById('totalCount').textContent=ORDER.reduce((n,s)=>n+getSelected(s).length,0)+'개 선택';
+}
+
+function setChecks(section, values){
+  document.querySelectorAll(`.kwcheck[data-section="${section}"]`).forEach(cb=>cb.checked=values.includes(cb.value));
+}
+
+function applyPreset(){
+  resetAll(false);
+  const preset={
+    Subject:["modern attack submarine"],
+    Mission:["anti-submarine warfare","target detection","target tracking"],
+    Action:["silent cruising","active sonar ping","torpedo launch"],
+    Environment:["deep ocean","underwater canyon","rocky seabed","suspended particles","underwater haze"],
+    System:["bow sonar dome","flank array sonar","heavyweight torpedo","torpedo tube","pump-jet propulsion","optical mast"],
+    Camera:["front three-quarter view","slightly low angle","cinematic wide shot","24mm lens","16:9"],
+    Lighting:["cold blue lighting","volumetric underwater lighting","deep shadows","소나 발광 효과"],
+    Style:["photorealistic","ultra realistic","military documentary","cinematic realism","physically based rendering"],
+    Motion:["어뢰의 버블 트레일","수중 와류","소나 파동 확산","부유물 이동"],
+    Details:["음향 흡수 타일","외판 패널","realistic hydrodynamics","authentic naval engineering","fine mechanical details","realistic depth perception"],
+    Constraints:["cartoon","anime","toy-like","excessive futuristic design","spaceship design","laser weapons","과도한 폭발","외부에 노출된 승무원","text","watermark"]
+  };
+  Object.entries(preset).forEach(([s,v])=>setChecks(s,v));
+  changed();
+}
+
+function selectRealism(){
+  const picks={
+    Style:["photorealistic","ultra realistic","cinematic realism","documentary realism","physically based rendering","PBR","HDR"],
+    Details:["physically accurate scale","realistic proportions","realistic hydrodynamics","physically plausible lighting","authentic naval engineering","technically believable design","fine mechanical details","realistic depth perception"],
+    Constraints:["cartoon","anime","toy-like","plastic model appearance","low-poly","game asset look","excessive futuristic design","malformed geometry","blurry","low resolution","distorted","artifacts","text","watermark"]
+  };
+  Object.entries(picks).forEach(([s,v])=>{
+    document.querySelectorAll(`.kwcheck[data-section="${s}"]`).forEach(cb=>{if(v.includes(cb.value))cb.checked=true});
+  });
+  changed();
+}
+
+function resetAll(regen=true){
+  document.querySelectorAll('.kwcheck').forEach(cb=>cb.checked=false);
+  ORDER.forEach(s=>document.getElementById('customchips_'+s).innerHTML='');
+  if(regen) changed();
+}
+
+async function copyText(id){
+  const text=document.getElementById(id).value;
+  try{await navigator.clipboard.writeText(text); alert('복사했습니다.')}catch(e){
+    const ta=document.getElementById(id);ta.select();document.execCommand('copy');alert('복사했습니다.');
+  }
+}
+
+function downloadText(id,filename){
+  const blob=new Blob([document.getElementById(id).value],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+document.getElementById('constraintNo')?.addEventListener('change',generate);
+render();
+</script>
+</body>
+</html>
